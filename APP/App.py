@@ -90,7 +90,7 @@ with st.sidebar:
 
             try:
                 num_chunks , source_name = ingest_pdf(
-                    tmp_path,chunks_store,summary_store,progress_callback=progress_cb
+                    tmp_path,chunks_store,summary_store, source_name = uf.name ,progress_callback=progress_cb
                 )
                 st.session_state.ingested_files.append(source_name)
                 status.update(label=f"✅ {uf.name}: {num_chunks} chunks indexed", state="complete")

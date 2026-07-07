@@ -23,7 +23,8 @@ IMAGE_PROMPT = (
     "the core concept being explained"
 )
 
-def process_pdf_multimodal(file_path: str , progress_callback=None) -> list[Document]:
+def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_callback=None) -> list[Document]:
+    source_name = source_name or os.path.basename(file_path)
     """
      Extracts text + image descriptions per page.
      progress_callback(current_page, total_pages, message) lets the caller
@@ -73,7 +74,7 @@ def process_pdf_multimodal(file_path: str , progress_callback=None) -> list[Docu
                 merged_content = page_text + "\n" + "".join(image_descriptions)
                 multimodal_pages.append(Document(
                     page_content=merged_content,
-                    metadata={"source": os.path.basename(file_path), "page": page_num + 1}
+                    metadata={"source": source_name, "page": page_num + 1}
                 ))
 
                 if progress_callback:
@@ -83,7 +84,7 @@ def process_pdf_multimodal(file_path: str , progress_callback=None) -> list[Docu
             return multimodal_pages
 
 
-def generate_document_summary(merged_documents: list[Document], file_path: str,
+def generate_document_summary(merged_documents: list[Document], source_name: str ,
                               progress_callback=None) -> Document:
     page_summaries = []
     total = len(merged_documents)
@@ -118,15 +119,15 @@ Page Summaries:
 
     return Document(
         page_content=response.text,
-        metadata={"source": os.path.basename(file_path), "type": "summary"}
+        metadata={"source": source_name, "type": "summary"}
     )
 
 
-def ingest_pdf(file_path:str , chunks_store , summary_store, progress_callback=None):
-    source_name = os.path.basename(file_path)
+def ingest_pdf(file_path:str , chunks_store , summary_store,source_name: str = None, progress_callback=None):
+    source_name = source_name or  os.path.basename(file_path)
 
-    merged_documents = process_pdf_multimodal(file_path, progress_callback)
-    summary_doc = generate_document_summary(merged_documents, file_path, progress_callback)
+    merged_documents = process_pdf_multimodal(file_path,source_name, progress_callback)
+    summary_doc = generate_document_summary(merged_documents, source_name, progress_callback)
 
     summary_store.add_documents([summary_doc])
 
