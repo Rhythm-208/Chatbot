@@ -3,8 +3,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from dotenv import load_dotenv
-
-
+from hybrid_retrieval import hybrid_retrieval
 load_dotenv()
 
 model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
@@ -67,9 +66,7 @@ class ChatEngine:
 
         if decision.mode == "pdf":
             search_query = decision.retrieve_query or query
-            docs = self.chunks_store.as_retriever(
-                search_kwargs={"k": 4, "filter": source_filter} if source_filter else {"k": 4}
-                ).invoke(search_query)
+            docs =  hybrid_retrieval(self.chunks_store,search_query,source_filter=source_filter , k =4)
 
             if not docs:
                 system_prompt = (
@@ -79,11 +76,11 @@ class ChatEngine:
                 )
             else:
                 context = "\n\n".join(
-                    f"[source: {d.metadata.get('source')}, page {d.metadata.get('page')}]\n{d.page_content}"
+                    f"[source: {d.metadatas.get('source')}, page {d.metadatas.get('page')}]\n{d.page_content}"
                     for d in docs
                 )
                 cited_sources = [
-                {"source": d.metadata.get("source") , "page": d.metadata.get("page")}
+                {"source": d.metadatas.get("source") , "page": d.metadatas.get("page")}
                 for d in docs
             ]
                 system_prompt = f"""You are a PDF assistant. Use the context to answer.
