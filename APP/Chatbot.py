@@ -66,9 +66,9 @@ class ChatEngine:
 
         if decision.mode == "pdf":
             search_query = decision.retrieve_query or query
-            docs =  hybrid_retrieval(self.chunks_store,search_query,source_filter=source_filter , k =4)
+            results =  hybrid_retrieval(self.chunks_store,search_query,source_filter=source_filter , k =4)
 
-            if not docs:
+            if not results:
                 system_prompt = (
                 "No relevant PDF content was found for this query in the "
                 "selected file(s). Tell the user you couldn't find this in "
@@ -76,13 +76,13 @@ class ChatEngine:
                 )
             else:
                 context = "\n\n".join(
-                    f"[source: {d.metadatas.get('source')}, page {d.metadatas.get('page')}]\n{d.page_content}"
-                    for d in docs
+                    f"[source: {meta.get('source')}, page {meta.get('page')}]\n{content}"
+                    for content, meta in results
                 )
                 cited_sources = [
-                {"source": d.metadatas.get("source") , "page": d.metadatas.get("page")}
-                for d in docs
-            ]
+                    {"source": meta.get("source"), "page": meta.get("page")}
+                    for content, meta in results
+                ]
                 system_prompt = f"""You are a PDF assistant. Use the context to answer.
             Cite the source file and page for claims you draw from the context.
             If the answer isn't in the context, say so first, then clearly label anything else as outside the PDF.

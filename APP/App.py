@@ -12,8 +12,9 @@ load_dotenv()
 
 st.set_page_config(page_title = "Multimodal PDF Chat",layout = "wide")
 
-PERSIST_DIR = "./chroma_db"
-SUMMARY_PERSIST_DIR = "./summary_chroma_db"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PERSIST_DIR = os.path.join(SCRIPT_DIR, "chroma_db")
+SUMMARY_PERSIST_DIR = os.path.join(SCRIPT_DIR, "summary_chroma_db")
 
 # ---------- Cached resources (created once per server process) ----------
 
@@ -42,18 +43,6 @@ def get_stores():
 
 chunks_store, summary_store = get_stores()
 
-#Sesssiom State
-
-if "chat_engine" not in st.session_state:
-    st.session_state.chat_engine = ChatEngine(chunks_store, summary_store)
-
-if "ingested_files" not in st.session_state:
-    st.session_state.ingested_files = []
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-
 def get_all_sources() -> list[str]:
     """
     Pulls every distinct `source` filename already in the chunks store,
@@ -68,6 +57,20 @@ def get_all_sources() -> list[str]:
         return []
 
 
+#Sesssiom State
+
+if "chat_engine" not in st.session_state:
+    st.session_state.chat_engine = ChatEngine(chunks_store, summary_store)
+
+if "ingested_files" not in st.session_state:
+    st.session_state.ingested_files = get_all_sources()
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+
+
+
 with st.sidebar:
     st.header("Upload PDFs")
 
@@ -75,9 +78,12 @@ with st.sidebar:
         "Upload one or mode PDFs",type = ["pdf"] , accept_multiple_files = True
     )
     if uploaded_files:
+        already_ingested = set(get_all_sources())
         for uf in uploaded_files:
-            if uf.name in st.session_state.ingested_files:
-                continue
+            if uf.name in st.session_state.ingested_files or uf.name in already_ingested:
+                st.sidebar.caption(f"⏭️ Skipping {uf.name} — already ingested previously.")
+                if uf.name not in st.session_state.ingested_files:
+                    st.session_state.ingested_files.append(uf.name)
 
             with tempfile.NamedTemporaryFile(delete=False , suffix = ".pdf") as tmp:
                 tmp.write(uf.getvalue())
