@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from dotenv import load_dotenv
+import re
 from hybrid_retrieval import hybrid_retrieval
 load_dotenv()
 
@@ -43,6 +44,25 @@ def _build_source_filter(active_sources: list[str] | None):
 
     return {"source": {"$in": active_sources}}
 
+
+def _extract_used_citations(answer_text: str , source_map : dict) -> list[dict]:
+    """
+        Scans the model's answer for [n] markers, keeps only the ones that
+        correspond to a real entry in source_map (guards against the model
+        inventing a citation number that was never provided), and returns
+        them in first-appearance order with duplicates removed.
+    """
+    found_numbers = re.findall(r"\[(\d+)\]", answer_text)
+    used = []
+    seen = set()
+    for n in found_numbers:
+        n = int(n)
+        if n in source_map and n not in seen:
+            used.append({"citation_id": n , **source_map[n]})
+            seen.add(n)
+    return used
+
+
 class ChatEngine:
 
     def __init__(self,chunks_store,summary_store):
@@ -63,6 +83,7 @@ class ChatEngine:
 
         source_filter = _build_source_filter(active_sources)
         cited_sources = []
+        pdf_source_map = None
 
         if decision.mode == "pdf":
             search_query = decision.retrieve_query or query
@@ -79,16 +100,22 @@ class ChatEngine:
                     f"[source: {meta.get('source')}, page {meta.get('page')}]\n{content}"
                     for content, meta in results
                 )
-                cited_sources = [
-                    {"source": meta.get("source"), "page": meta.get("page")}
-                    for content, meta in results
-                ]
-                system_prompt = f"""You are a PDF assistant. Use the context to answer.
-            Cite the source file and page for claims you draw from the context.
-            If the answer isn't in the context, say so first, then clearly label anything else as outside the PDF.
+                pdf_source_map = {
+                    i + 1: {"source": meta.get("source"), "page": meta.get("page")}
+                    for i, (content, meta) in enumerate(results)
+                }
 
-            Context:
-            {context}"""
+
+                system_prompt = f"""You are a PDF assistant. Use ONLY the numbered context blocks below to answer.
+
+Citation rules:
+- After every claim drawn from the context, add the matching marker, e.g. [1] or [2].
+- Only use marker numbers that appear in the context below. Never invent a number.
+- If a sentence combines multiple sources, cite all of them, e.g. [1][2].
+- If the answer isn't in the context, say so first, then clearly label anything else as outside the PDF and do not cite it.
+
+Context:
+{context}"""
 
         elif decision.mode == "summary":
             search_query = decision.retrieve_query or query
@@ -117,6 +144,9 @@ class ChatEngine:
         messages = [SystemMessage(content=system_prompt), *self.chat_history]
         response = model.invoke(messages)
         self.chat_history.append(AIMessage(content=response.content))
+
+        if pdf_source_map is not None:
+            cited_sources = _extract_used_citations(response.content , pdf_source_map)
 
         return {
             "answer": response.content,

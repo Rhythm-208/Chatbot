@@ -84,6 +84,7 @@ with st.sidebar:
                 st.sidebar.caption(f"⏭️ Skipping {uf.name} — already ingested previously.")
                 if uf.name not in st.session_state.ingested_files:
                     st.session_state.ingested_files.append(uf.name)
+                continue
 
             with tempfile.NamedTemporaryFile(delete=False , suffix = ".pdf") as tmp:
                 tmp.write(uf.getvalue())
@@ -107,28 +108,28 @@ with st.sidebar:
             finally:
                 os.unlink(tmp_path)
 
-        st.divider()
-        st.subheader("Files to Search")
-        all_sources = sorted(set(get_all_sources()) | set(st.session_state.ingested_files))
+    st.divider()
+    st.subheader("Files to Search")
+    all_sources = sorted(set(get_all_sources()) | set(st.session_state.ingested_files))
 
-        if not all_sources:
-            st.caption("No files uploaded")
-            selected_sources = []
+    if not all_sources:
+        st.caption("No files uploaded")
+        selected_sources = []
+
+    else:
+        select_all = st.checkbox("All files",value=True)
+        if select_all:
+            selected_sources = all_sources
+            st.multiselect("Files in scope",all_sources,default = all_sources , disabled = True)
 
         else:
-            select_all = st.checkbox("All files",value=True)
-            if select_all:
-                selected_sources = all_sources
-                st.multiselect("Files in scope",all_sources,default = all_sources , disabled = True)
+            selected_sources = st.multiselect("Files in scope",all_sources)
 
-            else:
-                selected_sources = st.multiselect("Files in scope",all_sources)
-
-        st.divider()
-        if st.button("Clear Chat History"):
-            st.session_state.messages = []
-            st.session_state.chat_engine.chat_history = []
-            st.rerun()
+    st.divider()
+    if st.button("Clear Chat History"):
+        st.session_state.messages = []
+        st.session_state.chat_engine.chat_history = []
+        st.rerun()
 
 
 st.title("Multimodal PDF Chat")
