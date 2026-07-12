@@ -140,11 +140,11 @@ for msg in st.session_state.messages:
         if msg.get("sources"):
             with st.expander("Sources"):
                 for s in msg["sources"]:
-                    if "page" in s:
-                        st.caption(f"{s['source']} — page {s['page']}")
+                    prefix = f"[{s['citation_id']}] " if "citation_id" in s else ""
+                    if "page" in s and s.get("page") is not None:
+                        st.caption(f"{prefix}{s['source']} — page {s['page']}")
                     else:
-                        st.caption(f"{s['source']}")
-
+                        st.caption(f"{prefix}{s['source']}")
 query = st.chat_input("Ask a question about your uploaded PDFs...")
 
 if query:
@@ -160,10 +160,11 @@ if query:
         if result["sources"]:
             with st.expander("Sources"):
                 for s in result["sources"]:
-                    if "page" in s:
-                        st.caption(f"{s['source']} — page {s['page']}")
+                    prefix = f"[{s['citation_id']}] " if "citation_id" in s else ""
+                    if "page" in s and s.get("page") is not None:
+                        st.caption(f"{prefix}{s['source']} — page {s['page']}")
                     else:
-                        st.caption(f"{s['source']}")
+                        st.caption(f"{prefix}{s['source']}")
 
     st.session_state.messages.append({
         "role": "assistant",

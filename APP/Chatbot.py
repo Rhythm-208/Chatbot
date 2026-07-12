@@ -25,6 +25,7 @@ class Router(BaseModel):
 
 
 router_model = model.with_structured_output(Router)
+MAX_HISTORY_MESSAGES  = 16
 
 ROUTER_SYSTEM_PROMPT = """
 Pick exactly one mode:
@@ -62,6 +63,12 @@ def _extract_used_citations(answer_text: str , source_map : dict) -> list[dict]:
             seen.add(n)
     return used
 
+def _trim_history(history: list , max_messages: int = MAX_HISTORY_MESSAGES) ->list:
+    trimmed = history
+    while len(trimmed) > max_messages:
+        trimmed = trimmed[2:]
+    return trimmed
+
 
 class ChatEngine:
 
@@ -73,6 +80,7 @@ class ChatEngine:
     def ask(self,query:str,active_sources:list[str] | None = None) ->dict:
 
         self.chat_history.append(HumanMessage(content = query))
+        self.chat_history = _trim_history(self.chat_history)
 
         routing_messages = [
             SystemMessage(content = ROUTER_SYSTEM_PROMPT),
@@ -144,6 +152,7 @@ Context:
         messages = [SystemMessage(content=system_prompt), *self.chat_history]
         response = model.invoke(messages)
         self.chat_history.append(AIMessage(content=response.content))
+        self.chat_history = _trim_history(self.chat_history)
 
         if pdf_source_map is not None:
             cited_sources = _extract_used_citations(response.content , pdf_source_map)
