@@ -163,6 +163,101 @@ Context:
             "sources": cited_sources,
         }
 
+    def ask_stream(self, query: str, active_sources: list[str] | None = None):
+        """
+                Streaming version of ask(). Returns (token_generator, result_holder).
+                Consume token_generator fully (e.g. via st.write_stream) before
+                reading result_holder['mode'] / result_holder['sources'].
+                """
+        self.chat_history.append(HumanMessage(content=query))
+        self.chat_history = _trim_history(self.chat_history)
+
+        routing_messages = [
+            SystemMessage(content=ROUTER_SYSTEM_PROMPT),
+            *self.chat_history,
+        ]
+        decision = router_model.invoke(routing_messages)
+
+        source_filter = _build_source_filter(active_sources)
+        cited_sources = []
+        pdf_source_map = None
+
+        if decision.mode == "pdf":
+            search_query = decision.retrieve_query or query
+            results = hybrid_retrieval(self.chunks_store, search_query, source_filter=source_filter, k=4)
+
+            if not results:
+                system_prompt = (
+                    "No relevant PDF content was found for this query in the "
+                    "selected file(s). Tell the user you couldn't find this in "
+                    "the document(s) and ask if they'd like a general answer instead."
+                )
+            else:
+                pdf_source_map = {
+                    i + 1: {"source": meta.get("source"), "page": meta.get("page")}
+                    for i, (content, meta) in enumerate(results)
+                }
+                context = "\n\n".join(
+                    f"[{i + 1}] (source: {meta.get('source')}, page {meta.get('page')})\n{content}"
+                    for i, (content, meta) in enumerate(results)
+                )
+                system_prompt = f"""You are a PDF assistant. Use ONLY the numbered context blocks below to answer.
+
+        Citation rules:
+        - After every claim drawn from the context, add the matching marker, e.g. [1] or [2].
+        - Only use marker numbers that appear in the context below. Never invent a number.
+        - If a sentence combines multiple sources, cite all of them, e.g. [1][2].
+        - If the answer isn't in the context, say so first, then clearly label anything else as outside the PDF and do not cite it.
+
+        Context:
+        {context}"""
+
+        elif decision.mode == "summary":
+            search_query = decision.retrieve_query or query
+            docs = self.summary_store.as_retriever(
+                search_kwargs={"k": 2, "filter": source_filter} if source_filter else {"k": 2}
+            ).invoke(search_query)
+            if not docs:
+                system_prompt = (
+                    "No document summary was found for the selected file(s). "
+                    "Tell the user no summary is available yet."
+                )
+            else:
+                context = "\n\n".join(
+                    f"[source: {d.metadata.get('source')}]\n{d.page_content}" for d in docs
+                )
+                cited_sources = [{"source": d.metadata.get("source")} for d in docs]
+                system_prompt = f"""You are answering questions about uploaded document(s) using their summaries.
+        If multiple documents are relevant, compare/contrast them clearly by source name.
+
+        Summary Context:
+        {context}"""
+
+        else:
+            system_prompt = "You are a general assistant. Answer from your own knowledge or the chat history."
+
+        messages = [SystemMessage(content=system_prompt), *self.chat_history]
+        result_holder = {"mode": decision.mode, "sources": cited_sources, "answer": None}
+
+        def token_generator():
+            full_text = ""
+            for chunk in model.stream(messages):
+                piece = chunk.content or ""
+                full_text += piece
+                yield piece
+
+            self.chat_history.append(AIMessage(content=full_text))
+            self.chat_history = _trim_history(self.chat_history)
+
+            if pdf_source_map is not None:
+                result_holder["sources"] = _extract_used_citations(full_text, pdf_source_map)
+            result_holder["answer"] = full_text
+
+        return token_generator(), result_holder
+
+
+
+
 
 
 

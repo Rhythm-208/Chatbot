@@ -153,13 +153,13 @@ if query:
         st.markdown(query)
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            result = st.session_state.chat_engine.ask(query, active_sources=selected_sources)
-        st.markdown(result["answer"])
-        st.caption(f"Mode: {result['mode']}")
-        if result["sources"]:
+        token_gen, result_holder = st.session_state.chat_engine.ask_stream(query, active_sources=selected_sources)
+        answer_text = st.write_stream(token_gen)
+        st.caption(f"Mode : {result_holder['mode']}")
+
+        if result_holder.get("sources"):
             with st.expander("Sources"):
-                for s in result["sources"]:
+                for s in result_holder["sources"]:
                     prefix = f"[{s['citation_id']}] " if "citation_id" in s else ""
                     if "page" in s and s.get("page") is not None:
                         st.caption(f"{prefix}{s['source']} — page {s['page']}")
@@ -168,21 +168,9 @@ if query:
 
     st.session_state.messages.append({
         "role": "assistant",
-        "content": result["answer"],
-        "sources": result["sources"],
+        "content": answer_text,
+        "sources": result_holder.get("sources", []),
     })
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
