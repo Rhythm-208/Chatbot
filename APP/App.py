@@ -1,11 +1,12 @@
 import os
 import tempfile
-
+import json
+import tempfile
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-
+from langchain_core.messages import HumanMessage,AIMessage
 from ingestion import ingest_pdf
 from Chatbot import ChatEngine
 load_dotenv()
@@ -15,7 +16,7 @@ st.set_page_config(page_title = "Multimodal PDF Chat",layout = "wide")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PERSIST_DIR = os.path.join(SCRIPT_DIR, "chroma_db")
 SUMMARY_PERSIST_DIR = os.path.join(SCRIPT_DIR, "summary_chroma_db")
-
+CHAT_STATE_FILE = os.path.join(SCRIPT_DIR, "chat_state.json")
 # ---------- Cached resources (created once per server process) ----------
 
 @st.cache_resource
@@ -56,18 +57,52 @@ def get_all_sources() -> list[str]:
     except Exception:
         return []
 
+def save_chat_state():
+    serializable_history = []
+    for m in st.session_state.chat_engine.chat_history:
+        role = "human" if isinstance(m, HumanMessage) else "ai"
+        serializable_history.append({"role":role,"content":m.content})
+    data = {
+        "messages":st.session_state.messages,
+        "chat_history":serializable_history,
+    }
+    try:
+        with open(CHAT_STATE_FILE,"w",encoding="utf-8") as f:
+            json.dump(data,f)
+    except Exception as e:
+        st.sidebar.caption(f"⚠️ Could not save chat state: {e}")
+
+def load_chat_state():
+    if not os.path.exists(CHAT_STATE_FILE):
+        return [],[]
+    try:
+        with open(CHAT_STATE_FILE,"r",encoding="utf-8") as f:
+            data = json.load(f)
+        ui_messages = data.get("messages",[])
+        langchain_history = []
+        for m in data.get("chat_history",[]):
+            if m["role"] == 'human':
+                langchain_history.append(HumanMessage(content = m["content"]))
+            else:
+                langchain_history.append(AIMessage(content = m["content"]))
+
+        return ui_messages,langchain_history
+    except Exception:
+        return [],[]
 
 #Sesssiom State
 
 if "chat_engine" not in st.session_state:
     st.session_state.chat_engine = ChatEngine(chunks_store, summary_store)
+    loaded_ui_messages, loaded_history = load_chat_state()
+    st.session_state.chat_engine.chat_history = loaded_history
+    st.session_state.messages = loaded_ui_messages
 
 if "ingested_files" not in st.session_state:
     st.session_state.ingested_files = get_all_sources()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
 
 
 
@@ -129,7 +164,10 @@ with st.sidebar:
     if st.button("Clear Chat History"):
         st.session_state.messages = []
         st.session_state.chat_engine.chat_history = []
+        if os.path.exists(CHAT_STATE_FILE):
+            os.remove(CHAT_STATE_FILE)
         st.rerun()
+
 
 
 st.title("Multimodal PDF Chat")
@@ -171,6 +209,7 @@ if query:
         "content": answer_text,
         "sources": result_holder.get("sources", []),
     })
+    save_chat_state()
 
 
 
