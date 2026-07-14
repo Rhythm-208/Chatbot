@@ -7,6 +7,7 @@ from google import genai
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
+from retry_utils import call_with_retry
 load_dotenv()
 
 vision_model = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -54,10 +55,11 @@ def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_cal
 
             try:
                 image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-                response = vision_model.models.generate_content(
+                response =  call_with_retry(
+                    vision_model.models.generate_content,
                     model="gemini-2.5-flash",
                     contents=[IMAGE_PROMPT, image]
-                )
+                    )
                 description = f"\n[Image {im_idx + 1} Description: {response.text}]\n"
                 image_cache[xref] = description
                 image_descriptions.append(description)
@@ -90,7 +92,8 @@ def generate_document_summary(merged_documents: list[Document], source_name: str
     total = len(merged_documents)
 
     for i, d in enumerate(merged_documents):
-        response = vision_model.models.generate_content(
+        response = call_with_retry(
+            vision_model.models.generate_content,
             model="gemini-2.5-flash",
             contents=f"Summarise this page in 150 words or less. Page content:\n{d.page_content}"
         )
@@ -101,9 +104,10 @@ def generate_document_summary(merged_documents: list[Document], source_name: str
 
     combined_page_summaries = "\n\n".join(page_summaries)
 
-    response = vision_model.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"""Create a structured summary.
+    response = call_with_retry(
+        vision_model.models.generate_content,
+        model = "gemini-2.5-flash",
+        contents = f"""Create a structured summary.
 
 Include:
 1. Main Topic
@@ -116,6 +120,8 @@ Page Summaries:
 {combined_page_summaries}
 """
     )
+
+
 
     return Document(
         page_content=response.text,

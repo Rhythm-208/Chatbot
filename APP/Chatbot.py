@@ -5,6 +5,7 @@ from typing import Optional, Literal
 from dotenv import load_dotenv
 import re
 from hybrid_retrieval import hybrid_retrieval
+from retry_utils import call_with_retry
 load_dotenv()
 
 model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
@@ -87,7 +88,7 @@ class ChatEngine:
             *self.chat_history,
         ]
 
-        decision = router_model.invoke(routing_messages)
+        decision = call_with_retry(router_model.invoke, routing_messages)
 
         source_filter = _build_source_filter(active_sources)
         cited_sources = []
@@ -150,7 +151,7 @@ Context:
             system_prompt = "You are a general assistant. Answer from your own knowledge or the chat history."
 
         messages = [SystemMessage(content=system_prompt), *self.chat_history]
-        response = model.invoke(messages)
+        response = call_with_retry(model.invoke, messages)
         self.chat_history.append(AIMessage(content=response.content))
         self.chat_history = _trim_history(self.chat_history)
 
@@ -241,10 +242,16 @@ Context:
 
         def token_generator():
             full_text = ""
-            for chunk in model.stream(messages):
-                piece = chunk.content or ""
-                full_text += piece
-                yield piece
+            try:
+                stream = call_with_retry(model.stream, messages)
+                for chunk in stream:
+                    piece = chunk.content or ""
+                    full_text += piece
+                    yield piece
+            except Exception as e:
+                error_msg = f"\n\n⚠️ Sorry, I hit an error generating a response: {e}"
+                full_text += error_msg
+                yield error_msg
 
             self.chat_history.append(AIMessage(content=full_text))
             self.chat_history = _trim_history(self.chat_history)
