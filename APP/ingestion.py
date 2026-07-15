@@ -10,6 +10,17 @@ from dotenv import load_dotenv
 from retry_utils import call_with_retry
 load_dotenv()
 
+
+MAX_PAGES = 60
+
+class PDFIngestionError(Exception):
+    """
+        Raised for expected, user-facing PDF problems (encrypted, corrupt,
+        empty, too large). Distinct from unexpected bugs, so callers can
+        show the message directly instead of a raw traceback.
+    """
+    pass
+
 vision_model = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 text_splitter = RecursiveCharacterTextSplitter(
@@ -31,17 +42,44 @@ def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_cal
      progress_callback(current_page, total_pages, message) lets the caller
      (e.g. Streamlit) show live progress instead of only console prints.
     """
-    doc = fitz.open(file_path)
+
+    try:
+        doc = fitz.open(file_path)
+    except Exception as e:
+        raise PDFIngestionError(f"Could not open '{source_name}' — the file may be corrupted or not a valid PDF. ({e})")
+    if doc.needs_pass:
+        doc.close()
+        raise  PDFIngestionError(f"'{source_name}' is password-protected. Please upload an unlocked PDF.")
+
+
+    total_pages = len(doc)
+
+    if total_pages  == 0:
+        doc.close()
+        raise PDFIngestionError(f"'{source_name}' has no pages.")
+
+    if total_pages > MAX_PAGES:
+        doc.close()
+        raise PDFIngestionError(
+            f"'{source_name}' has {total_pages} pages, which exceeds the {MAX_PAGES}-page limit. "
+            f"Please split it into smaller files and upload separately."
+        )
     multimodal_pages = []
     image_cache = {}
-    total_pages = len(doc)
+    pages_with_no_content = 0
+
+
 
     for page_num in range(total_pages):
         page = doc.load_page(page_num)
-        page_text = page.get_text().strip() or "[No text extracted from page]"
+        raw_text = page.get_text().strip()
+        page_text = raw_text or "[No text extracted from page]"
 
         image_descriptions = []
         image_list = page.get_images(full=True)
+
+        if not raw_text and not image_list:
+            pages_with_no_content +=1
 
         for im_idx, img in enumerate(image_list):
             xref = img[0]
@@ -83,6 +121,11 @@ def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_cal
                     progress_callback(page_num + 1, total_pages, f"Processed page {page_num + 1}/{total_pages}")
 
             doc.close()
+            if pages_with_no_content == total_pages:
+                if progress_callback:
+                    progress_callback( total_pages, total_pages,
+                "⚠️ Warning: no text or images could be extracted from any page. "
+                "This may be a scanned PDF without OCR — retrieval quality will be poor.")
             return multimodal_pages
 
 
