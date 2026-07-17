@@ -1,5 +1,6 @@
 import os
 import tempfile
+import logging
 import json
 import tempfile
 import streamlit as st
@@ -17,6 +18,18 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PERSIST_DIR = os.path.join(SCRIPT_DIR, "chroma_db")
 SUMMARY_PERSIST_DIR = os.path.join(SCRIPT_DIR, "summary_chroma_db")
 CHAT_STATE_FILE = os.path.join(SCRIPT_DIR, "chat_state.json")
+MAX_UPLOAD_MB = 50
+LOG_FILE =  os.path.join(SCRIPT_DIR, "app.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+    ],
+)
+logger = logging.getLogger(__name__)
 # ---------- Cached resources (created once per server process) ----------
 
 @st.cache_resource
@@ -54,7 +67,8 @@ def get_all_sources() -> list[str]:
         sources = {m.get("source") for m in raw.get("metadatas", []) if m.get("source")}
         return sorted(sources)
 
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to read sources from chunks store: %s",e)
         return []
 
 def save_chat_state():
@@ -87,10 +101,13 @@ def load_chat_state():
                 langchain_history.append(AIMessage(content = m["content"]))
 
         return ui_messages,langchain_history
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to load chat state, starting fresh: %s", e)
+
         return [],[]
 
-#Sesssiom State
+
+#Sesssion State
 
 if "chat_engine" not in st.session_state:
     st.session_state.chat_engine = ChatEngine(chunks_store, summary_store)
@@ -121,6 +138,15 @@ with st.sidebar:
                     st.session_state.ingested_files.append(uf.name)
                 continue
 
+            file_size_mb = uf.size/(1024*1024)
+            if file_size_mb > MAX_UPLOAD_MB:
+                logger.warning("Rejected upload '%s': %.1fMB exceeds %dMB limit", uf.name, file_size_mb, MAX_UPLOAD_MB)
+                st.sidebar.error(
+                    f"❌ {uf.name} is {file_size_mb:.1f}MB, which exceeds the "
+                    f"{MAX_UPLOAD_MB}MB limit. Please upload a smaller file."
+                )
+                continue
+
             with tempfile.NamedTemporaryFile(delete=False , suffix = ".pdf") as tmp:
                 tmp.write(uf.getvalue())
                 tmp_path = tmp.name
@@ -138,6 +164,7 @@ with st.sidebar:
                 status.update(label=f"✅ {uf.name}: {num_chunks} chunks indexed", state="complete")
 
             except Exception as e:
+                logger.exception("Ingestion failed for '%s'", uf.name)
                 status.update(label = f"❌ Failed to ingest {uf.name}: {e}",state="error")
 
             finally:
@@ -193,7 +220,12 @@ if query:
     with st.chat_message("assistant"):
         token_gen, result_holder = st.session_state.chat_engine.ask_stream(query, active_sources=selected_sources)
         answer_text = st.write_stream(token_gen)
-        st.caption(f"Mode : {result_holder['mode']}")
+        if result_holder["mode"] == "error":
+            logger.error("Chat turn ended in error mode for query: %r", query)
+            st.error(
+                "That turn hit an error — see above for what I could tell you. You can try rephrasing or asking again.")
+        else:
+            st.caption(f"Mode: {result_holder['mode']}")
 
         if result_holder.get("sources"):
             with st.expander("Sources"):
