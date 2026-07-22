@@ -35,13 +35,13 @@ IMAGE_PROMPT = (
     "the core concept being explained"
 )
 
-def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_callback=None) -> list[Document]:
-    source_name = source_name or os.path.basename(file_path)
+def process_pdf_multimodal(file_path: str, source_name: str = None, progress_callback=None) -> list[Document]:
     """
      Extracts text + image descriptions per page.
      progress_callback(current_page, total_pages, message) lets the caller
      (e.g. Streamlit) show live progress instead of only console prints.
     """
+    source_name = source_name or os.path.basename(file_path)
 
     try:
         doc = fitz.open(file_path)
@@ -49,12 +49,11 @@ def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_cal
         raise PDFIngestionError(f"Could not open '{source_name}' — the file may be corrupted or not a valid PDF. ({e})")
     if doc.needs_pass:
         doc.close()
-        raise  PDFIngestionError(f"'{source_name}' is password-protected. Please upload an unlocked PDF.")
-
+        raise PDFIngestionError(f"'{source_name}' is password-protected. Please upload an unlocked PDF.")
 
     total_pages = len(doc)
 
-    if total_pages  == 0:
+    if total_pages == 0:
         doc.close()
         raise PDFIngestionError(f"'{source_name}' has no pages.")
 
@@ -64,11 +63,10 @@ def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_cal
             f"'{source_name}' has {total_pages} pages, which exceeds the {MAX_PAGES}-page limit. "
             f"Please split it into smaller files and upload separately."
         )
+
     multimodal_pages = []
     image_cache = {}
     pages_with_no_content = 0
-
-
 
     for page_num in range(total_pages):
         page = doc.load_page(page_num)
@@ -79,7 +77,7 @@ def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_cal
         image_list = page.get_images(full=True)
 
         if not raw_text and not image_list:
-            pages_with_no_content +=1
+            pages_with_no_content += 1
 
         for im_idx, img in enumerate(image_list):
             xref = img[0]
@@ -93,9 +91,9 @@ def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_cal
 
             try:
                 image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-                response =  call_with_retry(
+                response = call_with_retry(
                     vision_model.models.generate_content,
-                    model="gemini-2.5-flash",
+                    model="gemini-3.5-flash",
                     contents=[IMAGE_PROMPT, image]
                     )
                 description = f"\n[Image {im_idx + 1} Description: {response.text}]\n"
@@ -111,23 +109,22 @@ def process_pdf_multimodal(file_path: str ,source_name: str = None ,progress_cal
             finally:
                 time.sleep(12)  # rate-limit guard for the vision API
 
-                merged_content = page_text + "\n" + "".join(image_descriptions)
-                multimodal_pages.append(Document(
-                    page_content=merged_content,
-                    metadata={"source": source_name, "page": page_num + 1}
-                ))
+        merged_content = page_text + "\n" + "".join(image_descriptions)
+        multimodal_pages.append(Document(
+            page_content=merged_content,
+            metadata={"source": source_name, "page": page_num + 1}
+        ))
 
-                if progress_callback:
-                    progress_callback(page_num + 1, total_pages, f"Processed page {page_num + 1}/{total_pages}")
+        if progress_callback:
+            progress_callback(page_num + 1, total_pages, f"Processed page {page_num + 1}/{total_pages}")
 
-            doc.close()
-            if pages_with_no_content == total_pages:
-                if progress_callback:
-                    progress_callback( total_pages, total_pages,
+    doc.close()
+    if pages_with_no_content == total_pages:
+        if progress_callback:
+            progress_callback(total_pages, total_pages,
                 "⚠️ Warning: no text or images could be extracted from any page. "
                 "This may be a scanned PDF without OCR — retrieval quality will be poor.")
-            return multimodal_pages
-
+    return multimodal_pages
 
 def generate_document_summary(merged_documents: list[Document], source_name: str ,
                               progress_callback=None) -> Document:
@@ -141,7 +138,7 @@ def generate_document_summary(merged_documents: list[Document], source_name: str
             contents=f"Summarise this page in 150 words or less. Page content:\n{d.page_content}"
         )
         page_summaries.append(response.text)
-        time.sleep(12)
+        time.sleep(20)
         if progress_callback:
             progress_callback(i + 1, total, f"Summarized page {i + 1}/{total}")
 

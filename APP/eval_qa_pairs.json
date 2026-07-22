@@ -1,0 +1,102 @@
+[
+  {
+    "question": "What BLEU score did the Transformer (big) model achieve on the WMT 2014 English-to-German translation task?",
+    "source": "Attention.pdf",
+    "expected_pages": [9]
+  },
+  {
+    "question": "What BLEU score did the Transformer (big) model achieve on the English-to-French task?",
+    "source": "Attention.pdf",
+    "expected_pages": [9]
+  },
+  {
+    "question": "What optimizer was used to train the models?",
+    "source": "Attention.pdf",
+    "expected_pages": [8]
+  },
+  {
+    "question": "What beta1 and beta2 values were used for the Adam optimizer?",
+    "source": "Attention.pdf",
+    "expected_pages": [8]
+  },
+  {
+    "question": "How many attention heads (h) were used in the model?",
+    "source": "Attention.pdf",
+    "expected_pages": [5]
+  },
+  {
+    "question": "What is the dimensionality of the model, d_model, in the base Transformer?",
+    "source": "Attention.pdf",
+    "expected_pages": [3, 6]
+  },
+  {
+    "question": "How many identical layers are stacked in the encoder?",
+    "source": "Attention.pdf",
+    "expected_pages": [3]
+  },
+  {
+    "question": "What hardware did the authors use to train their models?",
+    "source": "Attention.pdf",
+    "expected_pages": [8]
+  },
+  {
+    "question": "How long did it take to train the big Transformer model?",
+    "source": "Attention.pdf",
+    "expected_pages": [1, 8]
+  },
+  {
+    "question": "What functions are used to compute positional encodings?",
+    "source": "Attention.pdf",
+    "expected_pages": [6]
+  },
+  {
+    "question": "What factor is used to scale the dot products in scaled dot-product attention?",
+    "source": "Attention.pdf",
+    "expected_pages": [4]
+  },
+  {
+    "question": "How many sentence pairs were in the WMT 2014 English-German training dataset?",
+    "source": "Attention.pdf",
+    "expected_pages": [7]
+  },
+  {
+    "question": "What vocabulary size was used for the English-to-French word-piece tokenization?",
+    "source": "Attention.pdf",
+    "expected_pages": [7]
+  },
+  {
+    "question": "What dropout rate (Pdrop) was used for the base model?",
+    "source": "Attention.pdf",
+    "expected_pages": [7]
+  },
+  {
+    "question": "What F1 score did the Transformer achieve on WSJ Section 23 in the semi-supervised parsing setting?",
+    "source": "Attention.pdf",
+    "expected_pages": [11]
+  },
+  {
+    "question": "Who first proposed replacing RNNs with self-attention, according to the author contribution note?",
+    "source": "Attention.pdf",
+    "expected_pages": [1]
+  },
+  {
+    "question": "What value was used for warmup_steps in the learning rate schedule?",
+    "source": "Attention.pdf",
+    "expected_pages": [8]
+  },
+  {
+    "question": "According to the model complexity table, what is the maximum path length for a self-attention layer?",
+    "source": "Attention.pdf",
+    "expected_pages": [6]
+  },
+  {
+    "question": "What GitHub repository is mentioned as containing the training and evaluation code?",
+    "source": "Attention.pdf",
+    "expected_pages": [11]
+  },
+  {
+    "question": "What does the attention visualization figure showing the word 'making' illustrate?",
+    "source": "Attention.pdf",
+    "expected_pages": [14]
+  }
+]

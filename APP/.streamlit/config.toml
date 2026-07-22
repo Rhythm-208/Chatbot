@@ -1,4 +1,2 @@
-[
-server
-]
+[server]
 maxUploadSize = 50
